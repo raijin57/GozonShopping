@@ -1,0 +1,117 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: shopping-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orders-db:
+    image: postgres:16
+    container_name: shopping-orders-db
+    environment:
+      POSTGRES_DB: orders
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - orders_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  payments-db:
+    image: postgres:16
+    container_name: shopping-payments-db
+    environment:
+      POSTGRES_DB: payments
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - payments_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orders-service:
+    build:
+      context: .
+      dockerfile: Services/OrdersService/Dockerfile
+    container_name: shopping-orders-service
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__OrdersDb: Host=orders-db;Port=5432;Database=orders;Username=postgres;Password=postgres
+      RabbitMq__HostName: rabbitmq
+      RabbitMq__Port: 5672
+      RabbitMq__UserName: guest
+      RabbitMq__Password: guest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      orders-db:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+
+  payments-service:
+    build:
+      context: .
+      dockerfile: Services/PaymentsService/Dockerfile
+    container_name: shopping-payments-service
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__PaymentsDb: Host=payments-db;Port=5432;Database=payments;Username=postgres;Password=postgres
+      RabbitMq__HostName: rabbitmq
+      RabbitMq__Port: 5672
+      RabbitMq__UserName: guest
+      RabbitMq__Password: guest
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      payments-db:
+        condition: service_healthy
+    ports:
+      - "8082:8080"
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: ApiGateway/Dockerfile
+    container_name: shopping-api-gateway
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      orders-service:
+        condition: service_started
+      payments-service:
+        condition: service_started
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Frontend/Dockerfile
+    container_name: shopping-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+volumes:
+  orders_db_data:
+  payments_db_data:
+

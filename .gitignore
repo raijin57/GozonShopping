@@ -1,0 +1,31 @@
+# dotnet build artifacts
+**/bin/
+**/obj/
+**/TestResult*/
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE
+.vs/
+.idea/
+*.swp
+*.swx
+*.bak
+*.tmp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# npm / frontend (на будущее)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Logs
+*.log
+logs/
+

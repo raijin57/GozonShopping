@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Gozon Shop</title>
+    <link rel="stylesheet" href="styles.css?v=2">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+<body>
+<main class="container">
+    <h1>Gozon Orders & Payments</h1>
+
+    <section>
+        <h2>User</h2>
+        <label>User Id (Guid): <input id="userId" placeholder="00000000-0000-0000-0000-000000000000"></label>
+        <button id="connectWs">Connect WebSocket</button>
+    </section>
+
+    <section>
+        <h2>Account</h2>
+        <button id="createAccount">Create account</button>
+        <label>Top up amount: <input id="topupAmount" type="number" step="0.01" value="1000"></label>
+        <button id="topup">Top up</button>
+        <button id="getBalance">Get balance</button>
+        <div id="balance"></div>
+    </section>
+
+    <section>
+        <h2>Orders</h2>
+        <label>Order amount: <input id="orderAmount" type="number" step="0.01" value="500"></label>
+        <label>Description: <input id="orderDescription" value="Test order"></label>
+        <button id="createOrder">Create order</button>
+        <button id="loadOrders">Load orders</button>
+        <div id="orders"></div>
+    </section>
+
+    <section>
+        <h2>Log</h2>
+        <pre id="log"></pre>
+    </section>
+</main>
+
+<script src="app.js?v=2"></script>
+</body>
+</html>
+
