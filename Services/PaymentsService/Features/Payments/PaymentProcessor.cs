@@ -1,12 +1,15 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using PaymentsService.Abstractions.Interfaces;
 using PaymentsService.Domain.Entities;
+using PaymentsService.Infrastructure.Data;
 using Shared.Contracts.Messages;
 
 namespace PaymentsService.Features.Payments;
 
 public sealed class PaymentProcessor(
+    PaymentsDbContext dbContext,
     IAccountsRepository accountsRepository,
     IAccountBalanceService balanceService,
     IInboxRepository inboxRepository,
@@ -17,74 +20,89 @@ public sealed class PaymentProcessor(
 
     public async Task ProcessAsync(OrderPaymentRequested message, CancellationToken cancellationToken)
     {
-        var existingInbox = await inboxRepository.GetByMessageIdAsync(message.MessageId.ToString(), cancellationToken);
-        if (existingInbox is not null && existingInbox.ProcessedAtUtc is not null)
-        {
-            logger.LogInformation("Payment message {MessageId} already processed", message.MessageId);
-            return;
-        }
+        var strategy = dbContext.Database.CreateExecutionStrategy();
 
-        if (existingInbox is null)
+        await strategy.ExecuteAsync(async () =>
         {
-            existingInbox = new InboxMessage
+            using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
             {
-                Id = Guid.NewGuid(),
-                MessageId = message.MessageId.ToString(),
-                Type = nameof(OrderPaymentRequested),
-                Payload = JsonSerializer.Serialize(message, SerializerOptions),
-                ReceivedAtUtc = DateTime.UtcNow
-            };
-            await inboxRepository.AddAsync(existingInbox, cancellationToken);
-            await inboxRepository.SaveChangesAsync(cancellationToken);
-        }
+                var existingInbox = await inboxRepository.GetByMessageIdAsync(message.MessageId.ToString(), cancellationToken);
 
-        var account = await accountsRepository.GetByUserIdAsync(message.UserId, cancellationToken);
-        if (account is null)
-        {
-            await PublishResult(message, PaymentStatus.Failed, "Account not found", cancellationToken);
-            await MarkInboxProcessed(existingInbox, cancellationToken);
-            return;
-        }
+                if (existingInbox is not null && existingInbox.ProcessedAtUtc is not null)
+                {
+                    logger.LogInformation("Payment message {MessageId} already processed", message.MessageId);
+                    return;
+                }
 
-        var debitResult = await balanceService.TryDebitAsync(account.Id, message.OrderId, message.Amount, cancellationToken);
-        if (!debitResult.Success)
-        {
-            await PublishResult(message, PaymentStatus.Failed, debitResult.Error ?? "Debit failed", cancellationToken);
-            await MarkInboxProcessed(existingInbox, cancellationToken);
-            return;
-        }
+                if (existingInbox is null)
+                {
+                    existingInbox = new InboxMessage
+                    {
+                        Id = Guid.NewGuid(),
+                        MessageId = message.MessageId.ToString(),
+                        Type = nameof(OrderPaymentRequested),
+                        Payload = JsonSerializer.Serialize(message, SerializerOptions),
+                        ReceivedAtUtc = DateTime.UtcNow
+                    };
+                    await inboxRepository.AddAsync(existingInbox, cancellationToken);
+                }
 
-        await PublishResult(message, PaymentStatus.Success, null, cancellationToken);
-        await MarkInboxProcessed(existingInbox, cancellationToken);
-    }
+                PaymentStatus status;
+                string? reason = null;
 
-    private async Task PublishResult(OrderPaymentRequested original, PaymentStatus status, string? reason, CancellationToken cancellationToken)
-    {
-        var evt = new OrderPaymentStatusChanged(
-            MessageId: Guid.NewGuid(),
-            OrderId: original.OrderId,
-            UserId: original.UserId,
-            Status: status,
-            Reason: reason,
-            OccurredAtUtc: DateTime.UtcNow);
+                var account = await accountsRepository.GetByUserIdAsync(message.UserId, cancellationToken);
+                if (account is null)
+                {
+                    status = PaymentStatus.Failed;
+                    reason = "Account not found";
+                }
+                else
+                {
+                    var (success, error) = await balanceService.DebitWithoutSaveAsync(account.Id, message.OrderId, message.Amount, cancellationToken);
+                    if (!success)
+                    {
+                        status = PaymentStatus.Failed;
+                        reason = error ?? "Debit failed";
+                    }
+                    else
+                    {
+                        status = PaymentStatus.Success;
+                    }
+                }
 
-        var outbox = new OutboxMessage
-        {
-            Id = Guid.NewGuid(),
-            Type = nameof(OrderPaymentStatusChanged),
-            Payload = JsonSerializer.Serialize(evt, SerializerOptions),
-            CreatedAtUtc = DateTime.UtcNow
-        };
+                var evt = new OrderPaymentStatusChanged(
+                    MessageId: Guid.NewGuid(),
+                    OrderId: message.OrderId,
+                    UserId: message.UserId,
+                    Status: status,
+                    Reason: reason,
+                    OccurredAtUtc: DateTime.UtcNow);
 
-        await outboxRepository.AddAsync(outbox, cancellationToken);
-        await outboxRepository.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Payment result for order {OrderId}: {Status}", original.OrderId, status);
-    }
+                var outbox = new OutboxMessage
+                {
+                    Id = Guid.NewGuid(),
+                    Type = nameof(OrderPaymentStatusChanged),
+                    Payload = JsonSerializer.Serialize(evt, SerializerOptions),
+                    CreatedAtUtc = DateTime.UtcNow
+                };
 
-    private async Task MarkInboxProcessed(InboxMessage inbox, CancellationToken cancellationToken)
-    {
-        inbox.ProcessedAtUtc = DateTime.UtcNow;
-        await inboxRepository.SaveChangesAsync(cancellationToken);
+                await outboxRepository.AddAsync(outbox, cancellationToken);
+
+                existingInbox.ProcessedAtUtc = DateTime.UtcNow;
+
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+
+                logger.LogInformation("Payment result for order {OrderId}: {Status}", message.OrderId, status);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                logger.LogWarning("Concurrency exception in PaymentProcessor for message {MessageId}, retrying...", message.MessageId);
+                dbContext.ChangeTracker.Clear();
+                throw;
+            }
+        });
     }
 }
 

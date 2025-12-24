@@ -9,5 +9,7 @@ public interface IAccountBalanceService
     Task<AccountBalance> TopUpAsync(Guid accountId, decimal amount, CancellationToken cancellationToken);
 
     Task<(bool Success, string? Error)> TryDebitAsync(Guid accountId, Guid orderId, decimal amount, CancellationToken cancellationToken);
+
+    Task<(bool Success, string? Error)> DebitWithoutSaveAsync(Guid accountId, Guid orderId, decimal amount, CancellationToken cancellationToken);
 }
 

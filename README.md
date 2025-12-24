@@ -32,6 +32,20 @@
 docker compose up --build
 ```
 
+Локальная сборка/тесты (по сервисам):
+```bash
+# Orders
+dotnet build Services/OrdersService/OrdersService.sln
+dotnet test  Services/OrdersService/OrdersService.sln
+
+# Payments
+dotnet build Services/PaymentsService/PaymentsService.sln
+dotnet test  Services/PaymentsService/PaymentsService.sln
+
+# Gateway
+dotnet build ApiGateway/ApiGateway.sln
+```
+
 Основные эндпоинты:
 - Gateway: `http://localhost:8080`
 - Orders Swagger: `http://localhost:8080/orders/swagger/index.html` (напрямую: `http://localhost:8081/swagger/index.html`)
@@ -66,10 +80,12 @@ dotnet test
 - WebSocket (SignalR): `/hubs/orders`, метод `JoinOrder(orderId)` для подписки, сервер шлёт `OrderStatusChanged`.
 
 ## Где что лежит
-- `Services/OrdersService` — заказы, outbox, consumer, SignalR.
-- `Services/PaymentsService` — счета, ledger, inbox/outbox.
-- `ApiGateway` — YARP маршрутизация (REST, Swagger, WebSocket).
+- `Services/OrdersService` — заказы, outbox, consumer, SignalR. Solution: `Services/OrdersService/OrdersService.sln` (включает Orders, Shared.Contracts, OrdersService.Tests).
+- `Services/PaymentsService` — счета, ledger, inbox/outbox. Solution: `Services/PaymentsService/PaymentsService.sln` (включает Payments, Shared.Contracts, PaymentsService.Tests).
+- `ApiGateway` — YARP маршрутизация (REST, Swagger, WebSocket). Solution: `ApiGateway/ApiGateway.sln`.
 - `Frontend/` — статика (Nginx) для минимального UI.
 - `docker-compose.yml` — весь стек (RabbitMQ, Postgres x2, сервисы, фронт).
 - `Shared/Contracts` — DTO сообщений между сервисами.
 - `Tests/OrdersService.Tests`, `Tests/PaymentsService.Tests` — unit-тесты (AAA).
+
+> Ранее был общий `Shopping.sln`; теперь для каждого сервиса отдельный solution, чтобы не смешивать границы микросервисов.

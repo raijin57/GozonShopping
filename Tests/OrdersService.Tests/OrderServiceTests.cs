@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using AutoFixture;
 using AutoFixture.AutoMoq;
 using FluentAssertions;
@@ -44,7 +44,7 @@ public class OrderServiceTests
             });
 
         var service = new OrderService(ordersRepo.Object, outboxRepo.Object, logger.Object);
-        var request = new CreateOrderRequest(Guid.NewGuid(), 123.45m, "test order");
+        var request = _fixture.Create<CreateOrderRequest>();
 
         // Act
         var result = await service.CreateAsync(request, CancellationToken.None);

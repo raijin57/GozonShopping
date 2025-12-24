@@ -94,5 +94,33 @@ public sealed class AccountBalanceService(PaymentsDbContext dbContext, ILogger<A
 
         return (false, "Failed to debit after retries");
     }
+
+    public async Task<(bool Success, string? Error)> DebitWithoutSaveAsync(Guid accountId, Guid orderId, decimal amount, CancellationToken cancellationToken)
+    {
+        var existing = await dbContext.AccountTransactions.FirstOrDefaultAsync(t => t.OrderId == orderId, cancellationToken);
+        if (existing is not null)
+        {
+            return (true, null);
+        }
+
+        var balance = await GetBalanceAsync(accountId, cancellationToken);
+        if (balance.Balance < amount)
+        {
+            return (false, "Insufficient funds");
+        }
+
+        balance.Balance -= amount;
+
+        dbContext.AccountTransactions.Add(new AccountTransaction
+        {
+            Id = Guid.NewGuid(),
+            AccountId = accountId,
+            OrderId = orderId,
+            Delta = -amount,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+
+        return (true, null);
+    }
 }
 
