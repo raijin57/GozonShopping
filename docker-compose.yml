@@ -48,7 +48,7 @@ services:
   orders-service:
     build:
       context: .
-      dockerfile: Services/OrdersService/Dockerfile
+      dockerfile: src/Gozon.OrdersService/Dockerfile
     container_name: shopping-orders-service
     environment:
       ASPNETCORE_URLS: http://+:8080
@@ -68,7 +68,7 @@ services:
   payments-service:
     build:
       context: .
-      dockerfile: Services/PaymentsService/Dockerfile
+      dockerfile: src/Gozon.PaymentsService/Dockerfile
     container_name: shopping-payments-service
     environment:
       ASPNETCORE_URLS: http://+:8080
@@ -88,7 +88,7 @@ services:
   api-gateway:
     build:
       context: .
-      dockerfile: ApiGateway/Dockerfile
+      dockerfile: src/Gozon.ApiGateway/Dockerfile
     container_name: shopping-api-gateway
     environment:
       ASPNETCORE_URLS: http://+:8080

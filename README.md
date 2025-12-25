@@ -1,12 +1,12 @@
 # Gozon Shopping — Orders & Payments (Async, RabbitMQ, Ledger, SignalR)
 
 ## Что это
-Два микросервиса (Orders, Payments) + API Gateway (YARP) + минимальный фронтенд (Nginx + статичный HTML/JS) + WebSocket уведомления (SignalR). Сообщения между сервисами через RabbitMQ, at-least-once с идемпотентностью и паттернами Transactional Outbox / Inbox. Баланс реализован через ledger + материализованный баланс с optimistic concurrency (effectively exactly-once списание).
+Два микросервиса (Gozon.OrdersService, Gozon.PaymentsService) + API Gateway (Gozon.ApiGateway) + минимальный фронтенд (Nginx + статичный HTML/JS) + WebSocket уведомления (SignalR). Сообщения между сервисами через RabbitMQ, at-least-once с идемпотентностью и паттернами Transactional Outbox / Inbox. Баланс реализован через ledger + материализованный баланс с optimistic concurrency (effectively exactly-once списание).
 
 ## Архитектура
-- ApiGateway (`http://localhost:8080`) маршрутизирует REST и WebSocket.
-- OrdersService (`http://localhost:8081`) — заказы, outbox → RabbitMQ, SignalR-хаб для статусов.
-- PaymentsService (`http://localhost:8082`) — счета, пополнение, списание; inbox/outbox, ledger, идемпотентность по `orderId`.
+- Gozon.ApiGateway (`http://localhost:8080`) маршрутизирует REST и WebSocket.
+- Gozon.OrdersService (`http://localhost:8081`) — заказы, outbox → RabbitMQ, SignalR-хаб для статусов.
+- Gozon.PaymentsService (`http://localhost:8082`) — счета, пополнение, списание; inbox/outbox, ledger, идемпотентность по `orderId`.
 - RabbitMQ (5672/15672), Postgres (orders-db:5433, payments-db:5434).
 - Frontend (`http://localhost:3000`) — простая страница: создать счет, пополнить, создать заказ, смотреть статусы по пушу.
 
@@ -35,15 +35,15 @@ docker compose up --build
 Локальная сборка/тесты (по сервисам):
 ```bash
 # Orders
-dotnet build Services/OrdersService/OrdersService.sln
-dotnet test  Services/OrdersService/OrdersService.sln
+dotnet build src/Gozon.OrdersService/Gozon.OrdersService.sln
+dotnet test  src/Gozon.OrdersService/Gozon.OrdersService.sln
 
 # Payments
-dotnet build Services/PaymentsService/PaymentsService.sln
-dotnet test  Services/PaymentsService/PaymentsService.sln
+dotnet build src/Gozon.PaymentsService/Gozon.PaymentsService.sln
+dotnet test  src/Gozon.PaymentsService/Gozon.PaymentsService.sln
 
 # Gateway
-dotnet build ApiGateway/ApiGateway.sln
+dotnet build src/Gozon.ApiGateway/Gozon.ApiGateway.sln
 ```
 
 Основные эндпоинты:
@@ -80,12 +80,13 @@ dotnet test
 - WebSocket (SignalR): `/hubs/orders`, метод `JoinOrder(orderId)` для подписки, сервер шлёт `OrderStatusChanged`.
 
 ## Где что лежит
-- `Services/OrdersService` — заказы, outbox, consumer, SignalR. Solution: `Services/OrdersService/OrdersService.sln` (включает Orders, Shared.Contracts, OrdersService.Tests).
-- `Services/PaymentsService` — счета, ledger, inbox/outbox. Solution: `Services/PaymentsService/PaymentsService.sln` (включает Payments, Shared.Contracts, PaymentsService.Tests).
-- `ApiGateway` — YARP маршрутизация (REST, Swagger, WebSocket). Solution: `ApiGateway/ApiGateway.sln`.
+- `src/Gozon.OrdersService/` — заказы, outbox, consumer, SignalR. Solution: `src/Gozon.OrdersService/Gozon.OrdersService.sln` (включает OrdersService, Gozon.Shared, Gozon.OrdersService.Tests).
+- `src/Gozon.PaymentsService/` — счета, ledger, inbox/outbox. Solution: `src/Gozon.PaymentsService/Gozon.PaymentsService.sln` (включает PaymentsService, Gozon.Shared, Gozon.PaymentsService.Tests).
+- `src/Gozon.ApiGateway/` — YARP маршрутизация (REST, Swagger, WebSocket). Solution: `src/Gozon.ApiGateway/Gozon.ApiGateway.sln`.
+- `src/Gozon.Shared/` — DTO сообщений между сервисами.
+- `Tests/Gozon.OrdersService.Tests/`, `Tests/Gozon.PaymentsService.Tests/` — unit-тесты (AAA, AutoFixture).
 - `Frontend/` — статика (Nginx) для минимального UI.
 - `docker-compose.yml` — весь стек (RabbitMQ, Postgres x2, сервисы, фронт).
-- `Shared/Contracts` — DTO сообщений между сервисами.
-- `Tests/OrdersService.Tests`, `Tests/PaymentsService.Tests` — unit-тесты (AAA).
+- `Gozon.Shopping.sln` — главное решение со всеми проектами.
 
-> Ранее был общий `Shopping.sln`; теперь для каждого сервиса отдельный solution, чтобы не смешивать границы микросервисов.
+> Структура организована по конвенциям: `src/` для исходного кода, `Tests/` для тестов, отдельные solution файлы для каждого сервиса. Проекты названы по схеме `Gozon.ServiceName`.
